@@ -19,8 +19,7 @@ type Proxy struct {
 	erred         bool
 	errsig        chan bool
 	prefix        string
-	matcher       map[string]*Matcher
-	replacer      map[string]*Replacer
+	rules         map[string]*Rule
 	mutex         *sync.Mutex
 }
 
@@ -35,7 +34,7 @@ func (p *Proxy) err(s string, err error) {
 		return
 	}
 	if err != io.EOF {
-		glog.Warning(p.prefix+s, err)
+		glog.Warningf(p.prefix+s, err)
 	}
 	p.errsig <- true
 	p.erred = true
@@ -57,13 +56,18 @@ func (p *Proxy) Start() {
 		p.rconn.SetNoDelay(true)
 	}
 	//display both ends
-	glog.Info("Opened %s >>> %s", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
+	glog.Infof("Opened %s >>> %s", p.lconn.RemoteAddr().String(), p.rconn.RemoteAddr().String())
 	//bidirectional copy
 	go p.pipe(p.lconn, p.rconn)
 	go p.pipe(p.rconn, p.lconn)
 	//wait for close...
 	<-p.errsig
-	glog.Info("Closed (%d bytes sent, %d bytes recieved)", p.sentBytes, p.receivedBytes)
+	glog.Infof("Closed (%d bytes sent, %d bytes recieved)", p.sentBytes, p.receivedBytes)
+}
+
+func (p *Proxy) Stop() {
+	p.errsig <- true
+	p.erred = true
 }
 
 func (p *Proxy) pipe(src, dst *net.TCPConn) {
@@ -88,18 +92,13 @@ func (p *Proxy) pipe(src, dst *net.TCPConn) {
 		b := buff[:n]
 
 		p.mutex.Lock()
-		//execute match
-		for _, m := range p.matcher {
-			m.match(b)
-		}
-		//execute replace
-		for _, r := range p.replacer {
-			b = r.replace(b)
+		for _, r := range p.rules {
+			b = r.Do(b)
 		}
 		p.mutex.Unlock()
 
 		//show output
-		glog.Info(f, n, "\n"+fmt.Sprintf(h, b))
+		glog.Infof(f, n, "\n"+fmt.Sprintf(h, b))
 
 		//write out result
 		n, err = dst.Write(b)
@@ -115,30 +114,15 @@ func (p *Proxy) pipe(src, dst *net.TCPConn) {
 	}
 }
 
-func (p *Proxy) AddMatcher(key *string, m *Matcher) {
+func (p *Proxy) AddRule(key string, r *Rule) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	p.matcher[*key] = m
+	p.rules[key] = r
 }
 
-func (p *Proxy) DelMatcher(key *string) {
+func (p *Proxy) RmRule(key string) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-
-	p.matcher[*key] = nil
-}
-
-func (p *Proxy) AddReplacer(key *string, r *Replacer) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	p.replacer[*key] = r
-}
-
-func (p *Proxy) DelReplacer(key *string) {
-	p.mutex.Lock()
-	defer p.mutex.Unlock()
-
-	p.replacer[*key] = nil
+	delete(p.rules, key)
 }
