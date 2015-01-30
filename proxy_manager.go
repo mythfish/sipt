@@ -18,20 +18,20 @@ type ProxyManager struct {
 	rules      map[string]*Rule
 }
 
-func NewProxyManager(localAddr, remoteAddr *string, nagles bool) *ProxyManager {
+func NewProxyManager(nagles bool) *ProxyManager {
 	return &ProxyManager{
-		localAddr:  localAddr,
-		remoteAddr: remoteAddr,
-		listener:   nil,
-		proxys:     make(map[uint64]*Proxy),
-		mutex:      &sync.Mutex{},
-		connid:     0,
-		quit:       make(chan bool),
-		rules:      make(map[string]*Rule),
+		listener: nil,
+		proxys:   make(map[uint64]*Proxy),
+		mutex:    &sync.Mutex{},
+		connid:   0,
+		quit:     make(chan bool),
+		rules:    make(map[string]*Rule),
 	}
 }
 
-func (pm *ProxyManager) Run() error {
+func (pm *ProxyManager) Run(localAddr, remoteAddr *string) error {
+	pm.localAddr = localAddr
+	pm.remoteAddr = remoteAddr
 	laddr, err := net.ResolveTCPAddr("tcp", *pm.localAddr)
 	if err != nil {
 		glog.Error(err.Error())
@@ -49,6 +49,7 @@ func (pm *ProxyManager) Run() error {
 		return err
 	}
 	pm.listener = listener
+	pm.quit = make(chan bool)
 	for {
 		conn, err := listener.AcceptTCP()
 		if err != nil {
@@ -105,6 +106,8 @@ func (pm *ProxyManager) Stop() {
 
 	pm.listener.Close()
 	pm.listener = nil
+
+	pm.connid = 0
 }
 
 func (pm *ProxyManager) AddRule(key string, r *Rule) error {

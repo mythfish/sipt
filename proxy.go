@@ -75,9 +75,9 @@ func (p *Proxy) pipe(src, dst *net.TCPConn) {
 	var f, h string
 	islocal := src == p.lconn
 	if islocal {
-		f = ">>> %d bytes sent%s"
+		f = ">>> %d bytes sent%s\n"
 	} else {
-		f = "<<< %d bytes recieved%s"
+		f = "<<< %d bytes recieved%s\n"
 	}
 	h = "%s"
 
