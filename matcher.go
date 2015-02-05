@@ -29,6 +29,7 @@ func NewMatcher(match string) *Matcher {
 
 func (m *Matcher) match(input []byte) bool {
 
+	m.matchid = 0
 	ms := m.reg.FindAll(input, -1)
 	for _, mc := range ms {
 		m.matchid++
